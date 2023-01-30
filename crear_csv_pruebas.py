@@ -421,13 +421,14 @@ import random
 from datetime import datetime
 import csv
 
-archivo = open('personas.csv',"w", newline="", encoding='utf-8')
-escritura = csv.writer(archivo, delimiter=",", quotechar=",",
-                       quoting=csv.QUOTE_MINIMAL)
-escritura.writerow(["nombre", "sexo", "fecha_nacimiento", "estado_civil",
-                    "ciudad", "region", "numero_hijos"])
-
 try:
+    archivo = open('personas.csv',"w", newline="", encoding='utf-8')
+    escritura = csv.writer(archivo, delimiter=",", quotechar=",",
+                           quoting=csv.QUOTE_MINIMAL)
+    
+    escritura.writerow(["nombre", "sexo", "fecha_nacimiento", "estado_civil",
+                        "ciudad", "region", "numero_hijos"])
+
     numero_datos = int(input("INGRESE NUMERO DE DATOS A GENERAR: "))
     for i in range(0,numero_datos):
         sexo = random.randint(0,1)
