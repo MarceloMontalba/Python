@@ -184,6 +184,7 @@ apellidos       = ['González', 'Muñoz', 'Rojas', 'Díaz', 'Pérez', 'Soto',
 
 import random
 import mysql.connector as mysql
+from datetime import datetime
 
 #Funcion que quita los decimales de un float sin redondear (Trunca los datos)
 def truncar(decimal):
@@ -200,21 +201,28 @@ def convertir_segundos_datetime(segundos):
     minutos      = truncar((segundos - (31536000 * year) - (2592000 * meses) - (86400 * dias) - (3600 * horas))/60)
     segundos_aux = segundos - (31536000 * year) - (2592000 * meses) - (86400 * dias) - (3600 * horas) - (60 * minutos)
 
-    #Condicional por si el mes es febrero
-    dias = 27 if meses == 1 and dias>27 else dias
-    
-    datetime = str(year)
-    datetime += "-0%s"%(meses+1) if len(str(meses))<2 else "-%s"%(meses+1)
-    datetime += "-0%s"%(dias+1) if len(str(dias))<2 else "-%s"%(dias+1)
-    datetime += " 0%s"%horas if len(str(horas))<2 else " %s"%horas
-    datetime += ":0%s"%minutos if len(str(minutos))<2 else ":%s"%minutos
-    datetime += ":0%s"%segundos_aux if len(str(segundos_aux))<2 else ":%s"%segundos_aux
+    #Condicional por si el mes es febrero, ademas de controlar que el mes y dia no sean menor a 0.
+    dias  = 27 if meses == 1 and dias>27 else dias
+    dias  = 0 if dias<0 else dias
+    meses = 0 if meses<0 else meses
+    meses = 11 if meses>11 else meses
 
-    return datetime
+    tiempo= str(year)
+    tiempo += "-0%s"%(meses+1) if len(str(meses+1))<2 else "-%s"%(meses+1)
+    tiempo += "-0%s"%(dias+1) if len(str(dias+1))<2 else "-%s"%(dias+1)
+    tiempo += " 0%s"%horas if len(str(horas))<2 else " %s"%horas
+    tiempo += ":0%s"%minutos if len(str(minutos))<2 else ":%s"%minutos
+    tiempo += ":0%s"%segundos_aux if len(str(segundos_aux))<2 else ":%s"%segundos_aux
+
+    if meses>12:
+        print(tiempo)
+
+    return tiempo
 
 #Funcion que quita tildes y ñ, de las cadenas que se le entreguen
 def quitar_caracteres(cadena):
     aux = cadena.replace("á","a")
+    aux = aux.replace("à","a")
     aux = aux.replace("é","e")
     aux = aux.replace("í","i")
     aux = aux.replace("ó","o")
@@ -223,8 +231,8 @@ def quitar_caracteres(cadena):
 
     return aux
 
-numero_agentes  = 150
-numero_usuarios = 10
+numero_agentes  = int(input("INGRESAR EL NUMERO DE AGENTES DESEADO : "))
+numero_usuarios = int(input("INGRESAR EL NUMERO DE USUARIOS DESEADO: "))
 
 agentes  = []
 usuarios = []
@@ -300,30 +308,36 @@ for agente in agentes:
 
     #Se asigna un numero con el nombre del agente y se consulta si tal "nombre completo" existe como usuario y como correo
     #si no es asi, este será su nombre de usuario final. Sino el ciclo while sigue con el acumulador incrementado en 1.
+    aux_nuevo_agente = ""
     bandera    = 1
     acumulador = 0
     while bandera>0:
-        nuevo_agente += "_%s"%acumulador
+        aux_nuevo_agente = "%s_%s"%(nuevo_agente, acumulador)
         acumulador += 1
 
-        if (nuevo_agente in nombres_usuario) == False and (nuevo_agente+"@email.com" in emails) == False:
+        if (aux_nuevo_agente in nombres_usuario) == False and (aux_nuevo_agente+"@email.com" in emails) == False:
             bandera = 0
     
     #Se procede a crear las fechas de creacion, actualizacion y ultimo login
-    #del usuario al azar entre el año 1997 a 2022 en segundos.
+    #del usuario al azar entre el periodo actual - 20 años al periodo actual.
+
+    #Se calcula el periodo actual en segundos
+    aux_periodo     = datetime.now()
+    periodo_actual  = aux_periodo.year*31536000 + (aux_periodo.month-1)*2592000 + (aux_periodo.day-1)*86400
+    periodo_actual += aux_periodo.hour*3600 + aux_periodo.minute*60 + aux_periodo.second
+
     #1 Año = 31.536.000 segundos
-    fecha_creacion      = random.randint(31536000*1997, 31536000*2023)
-    fecha_actualizacion = random.randint(fecha_creacion, 31536000*2023)
-    fecha_login         = random.randint(31536000*2023, (31536000*2023) + (2592000*3)) if fecha_creacion<= 31536000*2023 else random.randint(fecha_creacion, (31536000*2023) + (2592000*3))
+    fecha_creacion      = random.randint(periodo_actual - 31536000*20, periodo_actual)
+    fecha_actualizacion = random.randint(fecha_creacion, periodo_actual)
 
-    #Creacion de una contraseña que por defecto será "administrador" que es transformada
-    #al se escribe en el metodo de encriptado que usa osTicket.
-    password = "$2a$08$2oA0PzcJt8p.WaqLtyGKNe5riWv6TQX9oTQwxust3E92ifWch5GNq"
+    #Para la ultima fecha de login se toma como referencia la fecha y hora actuales en segundos
+    #Y se elige aleatoriamente entre el periodo actual y periodo actual menos un mes.    
+    fecha_login = random.randint(periodo_actual-2592000, periodo_actual) if fecha_creacion<= periodo_actual-2592000 else random.randint(fecha_creacion, periodo_actual)
 
-    #Lista de notas  en la que se elegirá una al azar para el agente
-    notas = ["<p><strong>Es un/a buen/a empleado/a! :DD</strong></p>",
-             "<p>Gran empleado/a ;)</p>",
-             "<p><strong>Empleado/a complicado/a :\</strong></p>"]
+    #Creacion de una contraseña que por defecto que en verdad no funcionara, debido a que internamente
+    #osTicket tiene su codificador y decodificador de contraseñas (Es por esto que en un futuro si se desea
+    #entrar a alguna de estas cuestas, primeramente hay que cambiar la contraseña desde osTicket).
+    password = "Hola Mundo!!!"
     
     #Creacion numero telefonico
     numero_telefono = str(random.randint(0, 99))
@@ -352,7 +366,7 @@ for agente in agentes:
 
     #ORDEN DE DATOS:
     #   dept_id, role_id, username, firstname, lastname, passwd, email, phone,
-    #   phone_ext, mobile, signature, notes, isactive, isadmin, isvisible, onvacation,
+    #   phone_ext, mobile, signature, isactive, isadmin, isvisible, onvacation,
     #   assigned_only, show_assigned_tickets, change_passwd, max_page_size, auto_refresh_rate, default_signature_type,
     #   default_paper_size, extra, permissions, created, last_login, passwdreset, updated.
 
@@ -360,16 +374,15 @@ for agente in agentes:
     #lo añado en la variable fila_datos debido a que es poco comun que estas dos variables esten en 1.
     fila_datos = (random.choice(departamentos),
                   random.choice(roles),
-                  nuevo_agente,
+                  aux_nuevo_agente,
                   agente.split(" ")[0],
                   agente.split(" ")[1],
                   password,
-                  nuevo_agente+"@email.com",
+                  aux_nuevo_agente+"@email.com",
                   numero_telefono,
                   "+56",
                   "9%s"%numero_celular,
                   "",
-                  random.choice(notas),
                   random.choice([1, 1, 1, 1, 1, 0]),
                   random.choice([0,1]),
                   random.choice([0,1]),
@@ -390,11 +403,11 @@ for agente in agentes:
                   )
     
     sentencia = '''INSERT INTO ost_staff(dept_id, role_id, username, firstname, lastname, passwd, email, phone,
-                   phone_ext, mobile, signature, notes, isactive, isadmin, isvisible, onvacation,
+                   phone_ext, mobile, signature, isactive, isadmin, isvisible, onvacation,
                    assigned_only, show_assigned_tickets, change_passwd, max_page_size, auto_refresh_rate, default_signature_type,
                    default_paper_size, extra, permissions, created, lastlogin, passwdreset, updated)
                    
-                   VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                   VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)'''
 
     #Se ejecuta la sentencia y se hace el commit a la base de datos
@@ -402,55 +415,59 @@ for agente in agentes:
     cursor.execute(sentencia, fila_datos)
     base_datos.commit()
     cursor.close()
+print("AGENTES INGRESADOS CORRECTAMENTE.")
 
 
-#****LLenado de la tabla ost__search****. 
-#Se almacenan los usuarios en esta tabla si el campo "object_type" = "U"
+#****LLenado de la tabla ost_user, ost_user__cdata y ost_user_email****.
+
+#Creacion e insercion los datos de usuarios
 for usuario in usuarios:
-    #Se consulta a la tabla por el campo contenido donde dentro de todo
-    #se almacena tambien los correos de usuarios existentes aqui.
+    #Se consulta a bd por los correos de usuarios existentes
     cursor = base_datos.cursor()
-    cursor.execute("SELECT object_type, content FROM ost__search")
-    contenido = cursor.fetchall()
-    emails    = []
-
-    #El campo "content" guarda email, telefono y alguna nota del usuario
-    #dependiendo si se agrega una nota o no y el telefono o no, la estructura 
-    #del campo content cambia al hacer un split en python.
-    for x in contenido:
-        if x[0]=="U":
-            if len(x[1].split("\n")) == 1:
-                emails.append(x[1].split("\n")[0])
-
-            if len(x[1].split("\n")) == 2:
-                emails.append(x[1].split("\n")[1]) 
-
-            if len(x[1].split("\n")) == 3:
-                emails.append(x[1].split("\n")[2])
-
+    cursor.execute("SELECT address FROM ost_user_email")
+    emails = cursor.fetchall()
+    emails = [x[0] for x in emails]
+    cursor.close()
+    
+    #Se consulta a bd por los nombres de usuarios existentes
+    cursor = base_datos.cursor()
+    cursor.execute("SELECT username FROM ost_user_account")
+    nombres_usuarios = cursor.fetchall()
+    nombres_usuarios = [x[0] for x in nombres_usuarios]
     cursor.close()
 
-    #Se crea un correo para el usuario actual
-    nuevo_correo  = usuario.split(" ")[0][0:1].lower()
-    nuevo_correo += usuario.split(" ")[1].lower()
-    nuevo_correo  = quitar_caracteres(nuevo_correo)
+    #Se crea un nombre de usuario para el usuario actual
+    nuevo_usuario  = usuario.split(" ")[0][0:1].lower()
+    nuevo_usuario += usuario.split(" ")[1].lower()
+    nuevo_usuario  = quitar_caracteres(nuevo_usuario)
 
-    #Se asigna un numero con el correo del usuario y se consulta si tal correo existe
-    #si no es asi, este será su correo final. Sino el ciclo while sigue con el acumulador incrementado en 1.
+    #Se asigna un numero con el nombre del usuario y se consulta si tal "nombre completo" existe como usuario y como correo
+    #si no es asi, este será su nombre de usuario final. Sino el ciclo while sigue con el acumulador incrementado en 1.
+    aux_nuevo_usuario = ""
     bandera    = 1
     acumulador = 0
     while bandera>0:
-        nuevo_correo += "_%s@email.com"%acumulador
-        acumulador   += 1
+        aux_nuevo_usuario = "%s_%s"%(nuevo_usuario, acumulador)
 
-        if (nuevo_correo in emails) == False:
+        if (aux_nuevo_usuario in nombres_usuarios) == False and (aux_nuevo_usuario+"@email.com" in emails) == False:
             bandera = 0
+        else:
+            acumulador += 1
     
-    #Lista de notas 
-    notas = ["Cliente peligroso", "Buen Cliente", "Tranquilo"]
+    #Se procede a crear las fechas de creacion y actualizacion
+    #del usuario al azar entre el (periodo actual - 20 años) al (periodo actual).
+
+    #Se calcula el periodo actual en segundos
+    aux_periodo     = datetime.now()
+    periodo_actual  = aux_periodo.year*31536000 + (aux_periodo.month-1)*2592000 + (aux_periodo.day-1)*86400
+    periodo_actual += aux_periodo.hour*3600 + aux_periodo.minute*60 + aux_periodo.second
+
+    #1 Año = 31.536.000 segundos
+    fecha_creacion      = random.randint(periodo_actual - 31536000*20, periodo_actual)
+    fecha_actualizacion = random.randint(fecha_creacion, periodo_actual)
 
     #Creacion numero telefonico
-    numero_telefono = "%s"%random.randint(0, 99)
+    numero_telefono = str(random.randint(0, 99))
     
     if len(numero_telefono)<2:
         numero_telefono = "0%s"%numero_telefono
@@ -461,40 +478,79 @@ for usuario in usuarios:
         if len(aux)>=7:
             bandera = 0
         else:
-            aux = "0"+aux
-
-    numero_telefono += aux + " x56"
-
-    #Se consulta por los ids de tipo usuario para no asignar uno existente
-    cursor = base_datos.cursor()
-    cursor.execute("SELECT object_id FROM ost__search WHERE object_type='U'")
-    codigos = cursor.fetchall()
-    codigos = [x[0] for x in codigos]
-    cursor.close()
+            aux = "0" + aux
     
-    #El acumulador sera utilizado como el id del nuevo usuario.
-    #Si este ya existe se procede a aumentarlo en 1 hasta que encuentre un id que aun no haya sido creado.
-    acumulador = 0
-    bandera    = 1
-    while(bandera>0):
-        fila_datos = (
-            "U",
-            acumulador,
-            usuario,
-            "%s\n%s\n%s"%(numero_telefono, random.choice(notas), nuevo_correo)
-        )
+    numero_telefono += aux + "X56"
 
-        if (acumulador in codigos) == False and acumulador!=0:
-            #ORDEN DE DATOS:
-            #   object_type, object_id, title, content
-            sentencia = "INSERT INTO ost__search(object_type, object_id, title, content) VALUES(%s,%s,%s,%s)"
+    #ORDEN DE DATOS PARA INSERTAR en ost_user_email
+    #   user_id (0 momentaneamente), flags (será 0 por defecto), address
+    fila_datos = (0, 0 , "%s@email.com"%aux_nuevo_usuario)
+    sentencia  = "INSERT INTO ost_user_email(user_id, flags, address) VALUES(%s, %s, %s)"
 
-            cursor = base_datos.cursor()
-            cursor.execute(sentencia, fila_datos)
-            base_datos.commit()
-            cursor.close()
+    #Se insertan los datos en la tabla
+    cursor = base_datos.cursor()
+    cursor.execute(sentencia, fila_datos)
+    base_datos.commit()
+    cursor.close()
 
-            bandera = 0
+    #Se consulta a la base de datos por el id del correo que recientemente se ingresó
+    cursor = base_datos.cursor()
+    cursor.execute("SELECT id FROM ost_user_email WHERE address='%s'"%"%s@email.com"%aux_nuevo_usuario)
+    id_correo = cursor.fetchall()[0][0]
+
+    #ORDEN DE DATOS PARA INSERTAR en ost_user
+    #   org_id (0 por defecto), default_email_id, status (0 por defecto), name, created, updated
+    fila_datos = (0, id_correo, 0, usuario, 
+                  convertir_segundos_datetime(fecha_creacion), 
+                  convertir_segundos_datetime(fecha_actualizacion))
+
+    sentencia = """INSERT INTO ost_user(org_id, default_email_id, status, name, created, updated) 
+                VALUES(%s, %s, %s, %s, %s, %s)"""
+    
+    cursor = base_datos.cursor()
+    cursor.execute(sentencia, fila_datos)
+    base_datos.commit()
+    cursor.close()
+
+    #Se consulta a la base de datos por el id del usuario que recientemente se ingresó
+    cursor = base_datos.cursor()
+    cursor.execute("SELECT id FROM ost_user ORDER BY id DESC LIMIT 1")
+    id_usuario = cursor.fetchall()[0][0]
+
+    #Se cambia el id de usuario dentro de la tabla de correos
+    cursor    = base_datos.cursor()
+    sentencia = "UPDATE ost_user_email SET user_id=%s WHERE id=%s"%(id_usuario, id_correo)
+    cursor.execute(sentencia)
+    base_datos.commit()
+    cursor.close()
+
+    #ORDEN DE DATOS PARA INSERTAR en ost_user__cdata
+    #   user_id, phone
+    fila_datos = (id_usuario, numero_telefono)
+    
+    #Se insertan los datosen ost_user__cdata
+    cursor    = base_datos.cursor()
+    sentencia = "INSERT INTO ost_user__cdata(user_id, phone) VALUES(%s, %s)"
+    cursor.execute(sentencia, fila_datos)
+    base_datos.commit()
+    cursor.close()
+
+    #Se crea una probabilidad del 33% que este nuevo usuario creado esté registrado.
+    #Si sale 0, se crea un login para este usuario.
+    invitado = [1, 1, 0]
+
+    if random.choice(invitado) == 0:
+        #ORDEN DE DATOS PARA INSERTAR en ost_user_account
+        #    user_id, status (9 por defecto), timezone ('America/Santiago' por defecto),
+        #    username, passwd, registered
+        fila_datos = (id_usuario, 9, 'America/Santiago', aux_nuevo_usuario, 'Hola Mundo!!!', convertir_segundos_datetime(fecha_creacion))
+        sentencia  = """INSERT INTO ost_user_account(user_id, status, timezone, username, passwd, registered)
+                    VALUES(%s, %s, %s, %s, %s, %s)"""
         
-        else:
-            acumulador+= 1
+        #Se insertan los datos en ost_user_account
+        cursor = base_datos.cursor()
+        cursor.execute(sentencia, fila_datos)
+        base_datos.commit()
+        cursor.close()
+
+print("USUARIOS INGRESADOS CORRECTAMENTE.")
