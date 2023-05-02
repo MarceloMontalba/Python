@@ -269,7 +269,7 @@ base_datos = mysql.connect(
     database = "osticket"
 )
 
-#****LLenado de la tabla ost_staff****.
+#****LLenado LLenado de la información de agentes a traves de la tabla ost_staff****.
 
 #Se obtienen los ids de todos los departamentos
 cursor = base_datos.cursor()
@@ -380,7 +380,7 @@ for agente in agentes:
                   password,
                   aux_nuevo_agente+"@email.com",
                   numero_telefono,
-                  "+56",
+                  "56",
                   "9%s"%numero_celular,
                   "",
                   random.choice([1, 1, 1, 1, 1, 0]),
@@ -418,7 +418,9 @@ for agente in agentes:
 print("AGENTES INGRESADOS CORRECTAMENTE.")
 
 
-#****LLenado de la tabla ost_user, ost_user__cdata y ost_user_email****.
+#****LLenado de la información de usuarios a traves de la tabla 
+#ost_user, ost_user__cdata, ost_user_email, ost_form, 
+#ost_form_entry, ost_form_entry_values, ost_form_field ost__search ****.
 
 #Creacion e insercion los datos de usuarios
 for usuario in usuarios:
@@ -480,7 +482,7 @@ for usuario in usuarios:
         else:
             aux = "0" + aux
     
-    numero_telefono += aux + "X56"
+    numero_telefono += aux
 
     #ORDEN DE DATOS PARA INSERTAR en ost_user_email
     #   user_id (0 momentaneamente), flags (será 0 por defecto), address
@@ -525,12 +527,62 @@ for usuario in usuarios:
     cursor.close()
 
     #ORDEN DE DATOS PARA INSERTAR en ost_user__cdata
-    #   user_id, phone
-    fila_datos = (id_usuario, numero_telefono)
+    #   user_id, phone, notes
+    fila_datos = (id_usuario, numero_telefono + "X56", "")
     
     #Se insertan los datosen ost_user__cdata
     cursor    = base_datos.cursor()
-    sentencia = "INSERT INTO ost_user__cdata(user_id, phone) VALUES(%s, %s)"
+    sentencia = "INSERT INTO ost_user__cdata(user_id, phone, notes) VALUES(%s, %s, %s)"
+    cursor.execute(sentencia, fila_datos)
+    base_datos.commit()
+    cursor.close()
+
+    #ORDEN DE DATOS PARA INSERTAR en ost_form_entry
+    #   form_id (1 por defecto ya que en la tabla ost_form este registro pertenece a un contacto), 
+    #   object_id (id del usuario de la tabla ost_user), object_type ("U" por defecto, ya que el registro es un usuario),
+    #   sort (1 por defecto), created, updated
+    fila_datos = (1, id_usuario, "U", 1, convertir_segundos_datetime(fecha_creacion), convertir_segundos_datetime(fecha_actualizacion))
+    sentencia =  "INSERT INTO ost_form_entry(form_id, object_id, object_type, sort, created, updated) VALUES(%s, %s, %s, %s, %s, %s)"
+    
+    cursor = base_datos.cursor()
+    cursor.execute(sentencia, fila_datos)
+    base_datos.commit()
+    cursor.close()
+
+    #Se consulta a la base de datos por el id del formulario de contacto recientemente creado
+    cursor = base_datos.cursor()
+    cursor.execute("SELECT id FROM ost_form_entry ORDER BY id DESC LIMIT 1")
+    id_formulario = cursor.fetchall()[0][0]
+    cursor.close()
+
+    #Se registra el numero telefonico apuntanto al formulario de contacto del usuario en cuestión.
+    #ORDEN DE DATOS PARA INSERTAR en ost_form_entry_values
+    #   entry_id(id del formulario en la tabla ost_form_entry), 
+    #   field_id(por defecto es 3, ya que en la tabla ost_form_field el id 3 equivale a un registro telefonico),
+    #   value(aqui se escribe el numero telefonico con la extencion, separados por una "X")
+
+    fila_datos = (id_formulario, 3, numero_telefono+"X56")
+    sentencia =  "INSERT INTO ost_form_entry_values(entry_id, field_id, value) VALUES(%s, %s, %s)"
+    
+    cursor = base_datos.cursor()
+    cursor.execute(sentencia, fila_datos)
+    base_datos.commit()
+    cursor.close()
+
+    #Igualmente se registra que el usuario en cuestión no tiene ninguna nota adicional escrita.
+    #Por defecto field_id es 4, debido a que este registro es una nota, pero no hay notas escritas para este usuario.
+    fila_datos = (id_formulario, 4)
+    cursor = base_datos.cursor()
+    cursor.execute("INSERT INTO ost_form_entry_values(entry_id, field_id) VALUES(%s, %s)", fila_datos)
+    base_datos.commit()
+    cursor.close()
+
+    #ORDEN DE DATOS PARA INSERTAR en ost__search
+    #   object_type("U" por defecto, ya que es un usuario), object_id(id del usuario en la tabla ost_user),
+    #   title (nombre completo del usuario), content(contiene el numero y el correo separados por espacios)
+    fila_datos = ("U", id_usuario, usuario, "%s x56 %s"%(numero_telefono, aux_nuevo_usuario + "@email.com"))
+    sentencia =  "INSERT INTO ost__search(object_type, object_id, title, content) VALUES(%s, %s, %s, %s)"
+    cursor = base_datos.cursor()
     cursor.execute(sentencia, fila_datos)
     base_datos.commit()
     cursor.close()
