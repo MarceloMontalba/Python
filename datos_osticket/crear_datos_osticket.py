@@ -214,9 +214,6 @@ def convertir_segundos_datetime(segundos):
     tiempo += ":0%s"%minutos if len(str(minutos))<2 else ":%s"%minutos
     tiempo += ":0%s"%segundos_aux if len(str(segundos_aux))<2 else ":%s"%segundos_aux
 
-    if meses>12:
-        print(tiempo)
-
     return tiempo
 
 #Funcion que quita tildes y ñ, de las cadenas que se le entreguen
