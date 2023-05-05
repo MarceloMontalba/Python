@@ -216,6 +216,15 @@ def convertir_segundos_datetime(segundos):
 
     return tiempo
 
+#Funcion que transforma una cadena datetime en segundos
+def convertir_datetime_segundos(cadena):
+    #1 Año = 31.536.000s; 1 Mes = 2.592.000s; 1 Dia = 86.400s; 1 Hora = 3.600s; 1 Minuto = 60s
+    aux_cadena = cadena.split(" ")
+    segundos   = 31536000*int(aux_cadena[0].split("-")[0]) + 2592000*(int(aux_cadena[0].split("-")[1])-1) + 86400*(int(aux_cadena[0].split("-")[2])-1)
+    segundos  += 3600*int(aux_cadena[1].split(":")[0]) + 60*int(aux_cadena[1].split(":")[1]) + int(aux_cadena[1].split(":")[2])
+    return segundos
+
+
 #Funcion que quita tildes y ñ, de las cadenas que se le entreguen
 def quitar_caracteres(cadena):
     aux = cadena.replace("á","a")
@@ -228,8 +237,8 @@ def quitar_caracteres(cadena):
 
     return aux
 
-numero_agentes  = int(input("INGRESAR EL NUMERO DE AGENTES DESEADO : "))
-numero_usuarios = int(input("INGRESAR EL NUMERO DE USUARIOS DESEADO: "))
+numero_agentes  = int(input("Ingresar numero de agentes deseado  : "))
+numero_usuarios = int(input("Ingresar numero de usuarios deseado : "))
 
 agentes  = []
 usuarios = []
@@ -265,6 +274,7 @@ base_datos = mysql.connect(
     password = "root",
     database = "osticket"
 )
+
 
 #****LLenado LLenado de la información de agentes a traves de la tabla ost_staff****.
 
@@ -324,12 +334,15 @@ for agente in agentes:
     periodo_actual += aux_periodo.hour*3600 + aux_periodo.minute*60 + aux_periodo.second
 
     #1 Año = 31.536.000 segundos
-    fecha_creacion      = random.randint(periodo_actual - 31536000*20, periodo_actual)
-    fecha_actualizacion = random.randint(fecha_creacion, periodo_actual)
+    fecha_creacion = random.randint(periodo_actual - 31536000*20, periodo_actual)
+    
+    #La fecha de actualizacion será una entre la fecha de creacion hasta 4 meses mas, si esque
+    #estos cuatro meses no exceden al periodo actual. De lo contrario la fecha actual será el limite.
+    fecha_actualizacion = random.randint(fecha_creacion, fecha_creacion + 2592000*4 if fecha_creacion + 2592000*4<periodo_actual else periodo_actual) 
 
     #Para la ultima fecha de login se toma como referencia la fecha y hora actuales en segundos
-    #Y se elige aleatoriamente entre el periodo actual y periodo actual menos un mes.    
-    fecha_login = random.randint(periodo_actual-2592000, periodo_actual) if fecha_creacion<= periodo_actual-2592000 else random.randint(fecha_creacion, periodo_actual)
+    #Y se elige aleatoriamente entre el periodo actual menos 5 dias y el periodo actual.    
+    fecha_login = random.randint(periodo_actual- 86400*5, periodo_actual) if fecha_creacion<= periodo_actual- 86400*5 else random.randint(fecha_creacion, periodo_actual)
 
     #Creacion de una contraseña que por defecto que en verdad no funcionara, debido a que internamente
     #osTicket tiene su codificador y decodificador de contraseñas (Es por esto que en un futuro si se desea
@@ -367,45 +380,37 @@ for agente in agentes:
     #   assigned_only, show_assigned_tickets, change_passwd, max_page_size, auto_refresh_rate, default_signature_type,
     #   default_paper_size, extra, permissions, created, last_login, passwdreset, updated.
 
-    #Pdt: En el caso de un agente bloqueado o en vaciones he aplicado una probabilidad solo del 17% cuando
+    #Pdt: En el caso de un agente bloqueado, en vaciones o administrador he aplicado una probabilidad solo del 17% cuando
     #lo añado en la variable fila_datos debido a que es poco comun que estas dos variables esten en 1.
-    fila_datos = (random.choice(departamentos),
-                  random.choice(roles),
-                  aux_nuevo_agente,
-                  agente.split(" ")[0],
-                  agente.split(" ")[1],
-                  password,
-                  aux_nuevo_agente+"@email.com",
-                  numero_telefono,
-                  "56",
-                  "9%s"%numero_celular,
-                  "",
-                  random.choice([1, 1, 1, 1, 1, 0]),
-                  random.choice([0,1]),
-                  random.choice([0,1]),
-                  random.choice([0, 0, 0, 0, 0, 1]),
-                  random.choice([0,1]),
-                  random.choice([0,1]),
-                  0,
-                  0,
-                  0,
-                  'none',
-                  'Letter',
-                  '{"def_assn_role":true,"browser_lang":"es_ES"}',
+    agente_activo     = random.choice([1, 1, 1, 1, 1, 0])
+    agente_vacaciones = random.choice([0, 0, 0, 0, 0, 1])
+
+    # Si el agente esta de vacaciones pero la actualizacion mas dos meses
+    # es menor al periodo actual. Significa que se termino el plazo y se vuelve a 0.
+    if agente_vacaciones == 1 and fecha_actualizacion + 2592000*2<periodo_actual:
+        agente_vacaciones = 0
+
+    fila_datos = (random.choice(departamentos), random.choice(roles), aux_nuevo_agente,
+                  agente.split(" ")[0], agente.split(" ")[1], password,
+                  aux_nuevo_agente+"@email.com", numero_telefono,
+                  "56", "9%s"%numero_celular, "", agente_activo,
+                  random.choice([0, 0, 0, 1]), random.choice([0,1]), agente_vacaciones,
+                  random.choice([0,1]), random.choice([0,1]), 0, 0, 0, 'none',
+                  'Letter', '{"def_assn_role":true,"browser_lang":"es_ES"}',
                   '{"user.create":1,"user.delete":1,"user.edit":1,"user.manage":1,"user.dir":1,"org.create":1,"org.delete":1,"org.edit":1,"faq.manage":1,"visibility.agents":1,"visibility.departments":1}',
-                  convertir_segundos_datetime(fecha_creacion),
-                  convertir_segundos_datetime(fecha_login),
-                  convertir_segundos_datetime(fecha_creacion),
-                  convertir_segundos_datetime(fecha_actualizacion),
-                  )
+                  convertir_segundos_datetime(fecha_creacion), 
+                  # Si el agente esta activo y no está de vacaciones la ultima fecha de login será la prevista
+                  # de lo contrario la conexion será 3 dias antes de la fecha de actualizacion
+                  convertir_segundos_datetime(fecha_login) if agente_activo==1 and agente_vacaciones==0 else convertir_segundos_datetime(fecha_actualizacion - 86400*3),
+                  convertir_segundos_datetime(fecha_creacion),convertir_segundos_datetime(fecha_actualizacion))
     
-    sentencia = '''INSERT INTO ost_staff(dept_id, role_id, username, firstname, lastname, passwd, email, phone,
+    sentencia = """INSERT INTO ost_staff(dept_id, role_id, username, firstname, lastname, passwd, email, phone,
                    phone_ext, mobile, signature, isactive, isadmin, isvisible, onvacation,
                    assigned_only, show_assigned_tickets, change_passwd, max_page_size, auto_refresh_rate, default_signature_type,
                    default_paper_size, extra, permissions, created, lastlogin, passwdreset, updated)
                    
                    VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                   %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)'''
+                   %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
 
     #Se ejecuta la sentencia y se hace el commit a la base de datos
     cursor = base_datos.cursor()
@@ -603,3 +608,203 @@ for usuario in usuarios:
         cursor.close()
 
 print("USUARIOS INGRESADOS CORRECTAMENTE.")
+
+
+#****LLenado de la información de tickets a traves de la tabla
+
+#La variable usuarios se convierte en una lista de todos los id de usuarios
+#de la base de datos, excepto el usuario con id 1, debido a que este por defecto lo crea osticket.
+cursor = base_datos.cursor()
+cursor.execute("SELECT id FROM ost_user WHERE id>1")
+usuarios = cursor.fetchall()
+usuarios = [x[0] for x in usuarios]
+cursor.close()
+
+#Se obtienen los ids de departamentos
+cursor = base_datos.cursor()
+cursor.execute("SELECT id FROM ost_department")
+departamentos = cursor.fetchall()
+departamentos = [x[0] for x in departamentos]
+cursor.close()
+
+#Se obtienen los ids de la tabla ost_help_topic o id de asuntos
+cursor = base_datos.cursor()
+cursor.execute("SELECT topic_id FROM ost_help_topic")
+temas_tickets = cursor.fetchall()
+temas_tickets = [x[0] for x in temas_tickets]
+cursor.close()
+
+#Se consulta a la tabla ost_ticket status por los ids de estados y se almacenan en una lista
+cursor = base_datos.cursor()
+cursor.execute("SELECT id FROM ost_ticket_status ORDER BY id ASC")
+estados = cursor.fetchall()
+estados = [x[0] for x in estados]
+cursor.close()
+
+#Se procede a crear cada unos de los tickets por usuario
+for id_usuario in usuarios:
+    #Numero de tickets de atención que él usuario habra solicitado.
+    cantidad_tickets = random.randint(1,10)
+
+    #Se consulta por la fecha de creación del usuario para despues crear
+    #la fecha del ticket utilizando como referencia este periodo en segundos
+    cursor = base_datos.cursor()
+    cursor.execute("SELECT created FROM ost_user WHERE id='%s'"%id_usuario)
+    fecha_creacion_usuario = convertir_datetime_segundos(str(cursor.fetchall()[0][0]))
+    cursor.close()
+
+    for ticket in range(0, cantidad_tickets):
+        #Se consulta por los numeros de tickets existente
+        cursor = base_datos.cursor()
+        cursor.execute("SELECT number FROM ost_ticket")
+        numeros_tickets_bd = cursor.fetchall()
+        numeros_tickets_bd = [int(x[0]) for x in numeros_tickets_bd]
+        cursor.close()
+
+        #Se asigna un numero a este nuevo ticket, consultando si este ya existe.
+        numero_asignado = 0
+        bandera       = 1
+        while bandera > 0:
+            numero_asignado = random.randint(0,999999)
+
+            if (numero_asignado in numeros_tickets_bd) == False:
+                numero_asignado = str(numero_asignado)
+                bandera = 0
+        
+        while len(numero_asignado)<6:
+            numero_asignado = "0"+numero_asignado
+
+        # Se elije al azar el departamento al que se asignará el ticket
+        id_departamento = random.choice(departamentos)
+
+        # Se procede a consultar por agentes pertenecientes a dado departamento
+        # y se crea una lista con sus ids
+        cursor = base_datos.cursor()
+        cursor.execute("SELECT staff_id FROM ost_staff WHERE dept_id=%s"%id_departamento)
+        aux_agentes_departamento = cursor.fetchall()
+        aux_agentes_departamento = [x[0] for x in aux_agentes_departamento]
+        cursor.close()
+
+        # Se consulta a la bd cuantos tickets maneja cada agente de dicho departamento de modo que se va a 
+        # ordenar la lista desde el agente que tiene menos tickets, hasta el que tiene más
+        # y asi distribuir equitativamente la carga de trabajo.
+        cursor = base_datos.cursor()
+        sentencia = "SELECT staff_id FROM ost_ticket WHERE dept_id=%s GROUP BY staff_id ORDER BY count(*) ASC"%id_departamento
+        cursor.execute(sentencia)
+        agentes_departamento = cursor.fetchall()
+        agentes_departamento = [x[0] for x in agentes_departamento]
+        cursor.close()
+
+        # Si un agente de dicho departamento no tiene tickets, no saldrá en la tabla de tickets
+        # por eso se añade a la lista ordenada. AL PRINCIPIO, ya que no tiene tickets.
+        for x in aux_agentes_departamento:
+            if (x in agentes_departamento)== False:
+                agentes_departamento = [x] + agentes_departamento
+
+        # Se elimina el 0 de la lista, debido a que no es un agente, solo señala que no
+        # está asignado a nadie.
+        if 0 in agentes_departamento:
+            agentes_departamento.remove(0)
+
+        # Se calcula el periodo actual en segundos
+        aux_periodo     = datetime.now()
+        periodo_actual  = aux_periodo.year*31536000 + (aux_periodo.month-1)*2592000 + (aux_periodo.day-1)*86400
+        periodo_actual += aux_periodo.hour*3600 + aux_periodo.minute*60 + aux_periodo.second
+        
+        # Se establece la fecha de creación del ticket
+        fecha_creacion_ticket = random.randint(fecha_creacion_usuario, periodo_actual)
+
+        # Se establece la fecha limite para la respuesta a este ticket
+        fecha_limite_respuesta = fecha_creacion_ticket+ 5*86400
+
+        # Se elije un estado para el ticket actual (Abierto, Cerrado, Archivado, etc)
+        estado_asignado = random.choice(estados)
+
+        # Esta variable será un numero binario que señala si el ticket fué contestado o nó.
+        # Como factor a destacar hay que considerar que si un ticket sigue abierto
+        # es poco probable que lo hayan contestado aún y de lo contrario, si ya está
+        # cerrado, archivado o eliminado, es muy probable que lo hayan contestado. 
+        # Es por eso que se aplican distintas probabilidades. Si el estado asignado 
+        # es 1 (abierto), el ticket tiene una baja probabilidad de que haya sido contestado.
+        # al ser distinto de 1 (otros estados como cerrado, archivado, etc), 
+        # se da por hecho que se contestó tal ticket.
+        contestado = random.choice([0, 0, 0, 0, 0, 1]) if estado_asignado==1 else 1
+        
+        #Si contestado = 0, el ticket no está contestado la fecha de cierre estará nula
+        #Y el agente asignado momentaneamente será el primero de la lista
+        fecha_cierre_ticket = None
+        agente_asignado     = agentes_departamento[0] if len(agentes_departamento)>0 else 0
+        
+
+        if(contestado == 1):
+            # La fecha de cierre del ticket muy habitualmente se da dentro del plazo establecido de 5 dias,
+            # pero habrán ocaciones en que se exceda este plazo cuando el agente responde, 
+            # es por ello que se aplica un 75% de probabilidad de que la respuesta se haya dado dentro del 
+            # plazo limite, de lo contrario se puede llegar a retrazar hasta un mes de este plazo, 
+            # a esto se debe el choice para el limite de la fecha de cierre que se expone mas adelante.
+            aux_cierre = random.choice([fecha_limite_respuesta, 
+                                        fecha_limite_respuesta, 
+                                        fecha_limite_respuesta, 
+                                        fecha_limite_respuesta + 2592000])
+            
+            #Se asigna una fecha de cierre para este ticket
+            fecha_cierre_ticket = random.randint(fecha_creacion_ticket, aux_cierre)
+
+            bandera_agente_encontrado = 0
+            contador_agente = 0
+            while contador_agente<len(agentes_departamento):
+                # Se consulta por la fecha de ultimo login del agente actual, de manera que se compara si
+                # este agente accedio en la misma fecha de cerrado o despues, debido a que es ilogico que 
+                # alguien que haya resuelto un ticket, no se conectara antes de que este se resolviera.
+                # Entonces si este agente cumple esta condicion, se le asigna el ticket. 
+                cursor = base_datos.cursor()
+                cursor.execute("SELECT lastlogin FROM ost_staff WHERE staff_id='%s'"%agentes_departamento[contador_agente])
+                fecha_ultimo_login_agente = convertir_datetime_segundos(str(cursor.fetchall()[0][0]))
+                cursor.close()
+
+                #Si efectivamente la fecha de ultimo login es mayor o igual a la fecha de cierre del ticket
+                #Se asigna ese agente, si no se cambia a otro.
+                if fecha_ultimo_login_agente>=fecha_cierre_ticket:
+                    agente_asignado = agentes_departamento[contador_agente]
+                    bandera_agente_encontrado = 1
+                    contador_agente = len(agentes_departamento)
+                else:
+                    contador_agente += 1
+            
+            # Si no se encontró a ningun agente que se haya logueado en la fecha de cierre seleccionada
+            # o despues, se cambia el estado del ticket a sin contestar, sin fecha de cierre y de estado
+            # abierto.
+            if bandera_agente_encontrado == 0:
+                contestado = 0
+                fecha_cierre_ticket = None
+                estado_asignado = 1
+
+        #Se selecciona aleatoriamente el tipo de ticket al que pertenecerá
+        tema_asignado = random.choice(temas_tickets)
+
+        #ORDEN DE DATOS PARA INSERTAR en ost_ticket
+        #    number, user_id, user_email_id (por defecto en 0), status_id, dept_id, sla_id (por defecto 1), topic_id,
+        #    staff_id, team_id (0 por defecto), email_id, lock_id (0 por defecto), flags, sort, ip_address,
+        #    source, isoverdue, isanswered, est_duedate (fecha limite 5 dias habiles desde la creacion del ticket), closed, lastupdate, 
+        #    created, updated
+        fila_datos = (numero_asignado, id_usuario, 0, estado_asignado, id_departamento, 1,
+                      tema_asignado, agente_asignado, 0, 0, 0, 0, 0, '::1', 'Web', 
+                      #Si la fecha actual es mayor al limite impuesto y ademas este ticket no tiene fecha de cierre
+                      #Se considera retrasado. Al igual que si tuviese una fecha de cierre que supera a la fecha impuesta.
+                      1 if (fecha_limite_respuesta<periodo_actual and fecha_cierre_ticket==None) or 
+                           (fecha_cierre_ticket!=None and fecha_cierre_ticket>fecha_limite_respuesta) else 0, 
+                      contestado, convertir_segundos_datetime(fecha_limite_respuesta),
+                      convertir_segundos_datetime(fecha_cierre_ticket) if fecha_cierre_ticket!=None else None,
+                      convertir_segundos_datetime(fecha_cierre_ticket) if fecha_cierre_ticket!=None else convertir_segundos_datetime(fecha_creacion_ticket),
+                      convertir_segundos_datetime(fecha_creacion_ticket), convertir_segundos_datetime(fecha_creacion_ticket))
+
+        #Se procede a insertar los datos en la tabla ost_ticket
+        cursor    = base_datos.cursor()
+        sentencia = """INSERT INTO ost_ticket(number, user_id, user_email_id, status_id, dept_id, sla_id, topic_id,
+                       staff_id, team_id, email_id, lock_id, flags, sort, ip_address, source, isoverdue, isanswered, 
+                       est_duedate, closed, lastupdate, created, updated) VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                       %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
+        
+        cursor.execute(sentencia, fila_datos)
+        base_datos.commit()
+        cursor.close()
