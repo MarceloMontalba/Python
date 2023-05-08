@@ -340,9 +340,9 @@ for agente in agentes:
     #estos cuatro meses no exceden al periodo actual. De lo contrario la fecha actual será el limite.
     fecha_actualizacion = random.randint(fecha_creacion, fecha_creacion + 2592000*4 if fecha_creacion + 2592000*4<periodo_actual else periodo_actual) 
 
-    #Para la ultima fecha de login se toma como referencia la fecha y hora actuales en segundos
-    #Y se elige aleatoriamente entre el periodo actual menos 5 dias y el periodo actual.    
-    fecha_login = random.randint(periodo_actual- 86400*5, periodo_actual) if fecha_creacion<= periodo_actual- 86400*5 else random.randint(fecha_creacion, periodo_actual)
+    # Para la ultima fecha de login se toma como referencia la fecha y hora actuales en segundos
+    # Y se elige aleatoriamente entre el periodo actual menos 2 dias y el periodo actual.    
+    fecha_login = random.randint(periodo_actual- 86400*2, periodo_actual) if fecha_creacion<= periodo_actual- 86400*2 else random.randint(fecha_creacion, periodo_actual)
 
     #Creacion de una contraseña que por defecto que en verdad no funcionara, debido a que internamente
     #osTicket tiene su codificador y decodificador de contraseñas (Es por esto que en un futuro si se desea
@@ -417,7 +417,7 @@ for agente in agentes:
     cursor.execute(sentencia, fila_datos)
     base_datos.commit()
     cursor.close()
-print("AGENTES INGRESADOS CORRECTAMENTE.")
+print("Agentes ingresados correctamente...")
 
 
 #****LLenado de la información de usuarios a traves de la tabla 
@@ -606,8 +606,7 @@ for usuario in usuarios:
         cursor.execute(sentencia, fila_datos)
         base_datos.commit()
         cursor.close()
-
-print("USUARIOS INGRESADOS CORRECTAMENTE.")
+print("Usuarios ingresados correctamente...")
 
 
 #****LLenado de la información de tickets a traves de la tabla
@@ -634,7 +633,7 @@ temas_tickets = cursor.fetchall()
 temas_tickets = [x[0] for x in temas_tickets]
 cursor.close()
 
-#Se consulta a la tabla ost_ticket status por los ids de estados y se almacenan en una lista
+#Se consulta a la tabla ost_ticket_status por los ids de estados y se almacenan en una lista
 cursor = base_datos.cursor()
 cursor.execute("SELECT id FROM ost_ticket_status ORDER BY id ASC")
 estados = cursor.fetchall()
@@ -680,7 +679,7 @@ for id_usuario in usuarios:
         # Se procede a consultar por agentes pertenecientes a dado departamento
         # y se crea una lista con sus ids
         cursor = base_datos.cursor()
-        cursor.execute("SELECT staff_id FROM ost_staff WHERE dept_id=%s"%id_departamento)
+        cursor.execute("SELECT staff_id FROM ost_staff WHERE dept_id=%s AND isactive=1"%id_departamento)
         aux_agentes_departamento = cursor.fetchall()
         aux_agentes_departamento = [x[0] for x in aux_agentes_departamento]
         cursor.close()
@@ -782,13 +781,16 @@ for id_usuario in usuarios:
         #Se selecciona aleatoriamente el tipo de ticket al que pertenecerá
         tema_asignado = random.choice(temas_tickets)
 
+        #Probabilidad de fuente de conexion
+        fuente = ["Web", "Web", "Web" "Email", "Email", "Phone", "Phone", "API"]
+
         #ORDEN DE DATOS PARA INSERTAR en ost_ticket
         #    number, user_id, user_email_id (por defecto en 0), status_id, dept_id, sla_id (por defecto 1), topic_id,
         #    staff_id, team_id (0 por defecto), email_id, lock_id (0 por defecto), flags, sort, ip_address,
         #    source, isoverdue, isanswered, est_duedate (fecha limite 5 dias habiles desde la creacion del ticket), closed, lastupdate, 
         #    created, updated
         fila_datos = (numero_asignado, id_usuario, 0, estado_asignado, id_departamento, 1,
-                      tema_asignado, agente_asignado, 0, 0, 0, 0, 0, '::1', 'Web', 
+                      tema_asignado, agente_asignado, 0, 0, 0, 0, 0, '::1', random.choice(fuente), 
                       #Si la fecha actual es mayor al limite impuesto y ademas este ticket no tiene fecha de cierre
                       #Se considera retrasado. Al igual que si tuviese una fecha de cierre que supera a la fecha impuesta.
                       1 if (fecha_limite_respuesta<periodo_actual and fecha_cierre_ticket==None) or 
@@ -808,3 +810,120 @@ for id_usuario in usuarios:
         cursor.execute(sentencia, fila_datos)
         base_datos.commit()
         cursor.close()
+
+        #ORDEN DE DATOS PARA INSERTAR en ost_ticket__cdata
+        #   ticket_id, subject, priority
+
+        #Se consulta por el id del ticket actual
+        cursor = base_datos.cursor()
+        cursor.execute("SELECT ticket_id FROM ost_ticket ORDER BY ticket_id DESC LIMIT 1")
+        id_ticket_actual = cursor.fetchall()[0][0]
+        cursor.close()
+
+        # Se establece la prioridad que tendrá el ticket utilizando como referencia
+        # la fecha limite y dependiendo de que tan cerca esté la fecha actual a esa
+        # se establece una prioridad u otra. Si no hay fecha de cierre y ya se cumplió
+        # el tiempo, la prioridad será de emergencia. 
+        # Inicialmente la prioridad sera 0.
+        prioridad_ticket = 0
+
+        # Ya que la fecha limite de respuesta representa su fecha de creacion + 5 dias
+        # Para la prioridad pense dividir los 5 dias (que estan en segundos) en 3
+        # De modo que cada seccion de tiempo represente una prioridad. 
+        # Entonces dependiendo si el ticket fue resuelto o no
+        # Se compara con estas secciones de tiempo y se determina si la prioridad es 
+        # Baja, media, alta o de emergencia.
+        secciones_tiempo = (86400*5)/3
+        if fecha_cierre_ticket==None:
+            if periodo_actual>fecha_limite_respuesta:
+                prioridad_ticket = 4
+            else:
+                aux_fecha_creacion_ticket = fecha_creacion_ticket
+                
+                bandera = 1
+                while bandera>0:
+                    aux_fecha_creacion_ticket += secciones_tiempo
+                    prioridad_ticket += 1
+
+                    if aux_fecha_creacion_ticket>=fecha_limite_respuesta:
+                        bandera = 0
+        else:
+            if fecha_cierre_ticket > fecha_limite_respuesta:
+                prioridad_ticket = 4
+            else:
+                aux_fecha_creacion_ticket = fecha_creacion_ticket
+
+                bandera = 1
+                while bandera>0:
+                    aux_fecha_creacion_ticket += secciones_tiempo
+                    prioridad_ticket += 1
+
+                    if aux_fecha_creacion_ticket>=fecha_cierre_ticket:
+                        bandera = 0
+
+            
+        # Se insertan los datos en ost_ticket__cdata
+        # Pdt: Para la prioridad es mucho mas probable que sea normal, por lo tanto
+        # Se añaden 2 numeradores iguales a 2 (ya que es el id de prioridad normal) y un 1 por prioridad baja.
+        asunto_ticket    = "Este es el ticket N°%s"%id_ticket_actual
+
+        fila_datos = (id_ticket_actual, asunto_ticket, prioridad_ticket)
+        sentencia  = "INSERT INTO ost_ticket__cdata(ticket_id, subject, priority) VALUES(%s, %s, %s)"
+
+        cursor = base_datos.cursor()
+        cursor.execute(sentencia, fila_datos)
+        base_datos.commit()
+        cursor.close()
+
+        #ORDEN DE DATOS PARA INSERTAR en ost_form_entry
+        #    form_id (2 por defecto ya que se trata un ticket), object_id, object_type ("T" por defecto),
+        #    sort(0 por defecto), extra('{"disable":[]}' por defecto), created, updated
+
+        cursor = base_datos.cursor()
+        fila_datos = (2, id_ticket_actual, "T", 0, '{"disable":[]}',
+                      convertir_segundos_datetime(fecha_creacion_ticket),
+                      convertir_segundos_datetime(fecha_creacion_ticket))
+        sentencia = """ INSERT INTO ost_form_entry(form_id, object_id, object_type, sort, extra, created, updated)
+                        VALUES(%s, %s, %s, %s, %s, %s, %s)"""
+
+        #Se insertan los datos
+        cursor.execute(sentencia, fila_datos)
+        base_datos.commit()
+        cursor.close()
+
+        # Se consulta por el id de la conexion hacia el ticket creada anteriormente y se utiliza
+        # Para dar la referencia a ost_form_entry_values
+        cursor = base_datos.cursor()
+        cursor.execute("SELECT id FROM ost_form_entry ORDER BY id DESC LIMIT 1")
+        conexion_ticket = cursor.fetchall()[0][0]
+        cursor.close()
+
+        #ORDEN DE DATOS PARA INSERTAR en ost_form_entry_values
+        #    entry_id, field_id (20, ya que es el asunto), value
+        fila_datos = (conexion_ticket, 20, asunto_ticket)
+        cursor = base_datos.cursor()
+        cursor.execute("""INSERT INTO ost_form_entry_values(entry_id, field_id, value)
+                       VALUES(%s, %s, %s)""",fila_datos)
+        base_datos.commit()
+        cursor.close()
+
+        # Se consulta a la tabla ost_ticket_priority por el valor de la prioridad del actual
+        # ticket y asi señalarlo dentro de la tabla ost_form_entry_values
+        cursor = base_datos.cursor()
+        cursor.execute("SELECT priority_desc FROM ost_ticket_priority WHERE priority_id='%s'"%prioridad_ticket)
+        valor_prioridad_ticket = cursor.fetchall()[0][0]
+        cursor.close()
+
+        #ORDEN DE DATOS PARA INSERTAR en ost_form_entry_values
+        #    entry_id, field_id (22, ya que esta fila señala prioridad del ticket), value, value_id
+        fila_datos = (conexion_ticket, 22, valor_prioridad_ticket, prioridad_ticket)
+        sentencia = """INSERT INTO ost_form_entry_values(entry_id, field_id, value, value_id)
+                       VALUES(%s, %s, %s, %s)"""
+        
+        #Se insertan los datos en ost_form_entry_values
+        cursor = base_datos.cursor()
+        cursor.execute(sentencia, fila_datos)
+        base_datos.commit()
+        cursor.close()
+
+print("Tickets ingresados correctamente.")
