@@ -570,7 +570,117 @@ def asignar_rol_usuario(id_usuario, id_rol, id_contexto, id_inscripcion):
     base_datos.commit()
     cursor.close()
 
+# Funcion que crea la instancia de un objeto que se asignará al topico de un curso
+def crear_datos_instancia(id_curso, nombre_instancia, nombre_tabla):
+    global base_datos
+
+    course = id_curso
+    name   = nombre_instancia.upper()
+    intro  = '<p dir="ltr" style="text-align: left;">' + nombre_instancia.upper() +'</p>'
+    introformat = 1
+
+    # Se insertan los datos
+    sentencia = "INSERT INTO "+str(nombre_tabla)+"(course, name, intro, introformat) VALUES(%s, %s, %s, %s)"
+    datos     = (course, name, intro, introformat)
+
+    cursor = base_datos.cursor()
+    cursor.execute(sentencia, datos)
+    base_datos.commit()
+    cursor.close()
+
+    # Se consulta por el id de la instancia recien creada
+    cursor = base_datos.cursor()
+    cursor.execute("SELECT id FROM "+str(nombre_tabla)+" ORDER BY id DESC LIMIT 1")
+    id_instancia = cursor.fetchall()[0][0]
+    cursor.close()
+
+    return id_instancia
+
+# Funcion que crea objetos (archivos, links, paginas, carpetas en los distintos topicos).
+def crear_datos_objetos(id_curso, id_topico):
+    global base_datos
+
+    # Datos por defecto
+    course   = id_curso
+    section  = id_topico
+    added    = 1685727129
+    score    = 0
+    indent   = 0
+    visible  = 1
+    visibleoncoursepage = 1
+    visibleold          = 1
+    groupmode           = 0
+    groupingid          = 0
+    completion          = 1
+    completionview      = 0
+    completionexpected  = 0
+    showdescription     = 0
+    deletioninprogress  = 0
+
+    # Se consulta a la base de datos por lo tipos de objeto que pueden existir
+    cursor = base_datos.cursor()
+    cursor.execute("SELECT id, name FROM mdl_modules")
+    tipos_objetos = [x for x in cursor.fetchall()]
+    cursor.close()
+
+    n_objetos = random.randint(3, 10)
+    for i in range(0, n_objetos):
+        module = random.choice(tipos_objetos)
+
+        # Se crea la instancia para el objeto
+        instance = crear_datos_instancia(course, "%s_%s"%(module[1],i), "mdl_%s"%module[1])
+
+        # Se guardan los datos en la bd
+        sentencia = """INSERT INTO mdl_course_modules(course, instance, section, added, score, indent, visible,
+                       visibleoncoursepage, visibleold, groupmode, groupingid, completion, completionview, completionexpected, 
+                       showdescription, deletioninprogress, module) VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 
+                       %s, %s, %s, %s, %s)"""
+        
+        datos = (course, instance, section, added, score, indent, visible, visibleoncoursepage, visibleold, 
+                 groupmode, groupingid, completion, completionview, completionexpected, showdescription, deletioninprogress,
+                 module[0])
+        
+        cursor = base_datos.cursor()
+        cursor.execute(sentencia, datos)
+        base_datos.commit()
+        cursor.close()
+        
+
+
 # Funcion que crea los topicos de los distintos cursos
+def crear_datos_topicos(numero_topicos, id_curso):
+    global base_datos
+
+    course       = id_curso
+    summary       = ""
+    summaryformat = 1
+    sequence     = ""
+    visible      = 1
+    timemodified = 1685726724
+
+    for i in range(0, int(numero_topicos)):
+        section = i
+        name    = "Sección "+ str(i) +" del curso."
+        name    = name.upper()
+        sentencia = """INSERT INTO mdl_course_sections(course, section, summary, summaryformat, sequence, visible, timemodified, name)
+                       VALUES(%s, %s, %s, %s, %s, %s, %s, %s)"""
+        datos = (course, section, summary, summaryformat, sequence, visible, timemodified, name)
+
+        # Se inserta el nuevo topico creado
+        cursor = base_datos.cursor()
+        cursor.execute(sentencia, datos)
+        base_datos.commit()
+        cursor.close()
+
+        # Se consulta a la base de datos por el id del topico creado recientemente
+        cursor = base_datos.cursor()
+        cursor.execute("SELECT id FROM mdl_course_sections ORDER BY id DESC LIMIT 1")
+        topico_id = cursor.fetchall()[0][0]
+        cursor.close()
+
+        # Se crean objetos para este topico
+        crear_datos_objetos(course, topico_id)
+
 
 # Conexion BD de Moodle
 base_datos = mysql.connect(
@@ -639,4 +749,10 @@ for curso in cursos:
     for alumno_id in aux_alumnos:
         asignar_rol_usuario(alumno_id, 5, contexto_id, inscripcion_id)
     print("Alumnos del curso '%s' asignados correctamente."%curso[0])
+
+    # Se procede a crear los topicos o apartados del curso (aleatoriamente se
+    # establece la cantidad existente de estos en el curso, entre 6 a 10).
+    n_topicos = random.randint(6, 10)
+    crear_datos_topicos(n_topicos, curso_id)
+    print("Topicos del curso '%s' creados correctamente."%curso[0])
 
