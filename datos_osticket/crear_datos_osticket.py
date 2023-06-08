@@ -782,7 +782,7 @@ for id_usuario in usuarios:
         tema_asignado = random.choice(temas_tickets)
 
         #Probabilidad de fuente de conexion
-        fuente = ["Web", "Web", "Web" "Email", "Email", "Phone", "Phone", "API"]
+        fuente = ["Web", "Web", "Web", "Web", "Email", "Email", "Phone", "Phone", "API"]
 
         #ORDEN DE DATOS PARA INSERTAR en ost_ticket
         #    number, user_id, user_email_id (por defecto en 0), status_id, dept_id, sla_id (por defecto 1), topic_id,
@@ -927,3 +927,168 @@ for id_usuario in usuarios:
         cursor.close()
 
 print("Tickets ingresados correctamente.")
+
+
+# Se preparan los datos para insertarlos en las tablas correspondientes de tareas
+cursor = base_datos.cursor()
+cursor.execute("SELECT staff_id, dept_id, isactive, created, updated FROM ost_staff WHERE staff_id>1 ORDER BY staff_id ASC")
+informacion_agente = cursor.fetchall()
+cursor.close()
+
+for agente in informacion_agente:
+    n_tareas = random.randint(1, 40)
+    contador = 1
+
+    for tarea in range(0, n_tareas):
+        # Datos por defecto
+        dept_id     = agente[1]
+        staff_id    = agente[0]
+        object_id   = 0
+        object_type = ""
+        team_id     = 0
+        lock_id     = 0
+
+        cursor = base_datos.cursor()
+        cursor.execute("SELECT id FROM ost_task ORDER BY id DESC LIMIT 1")
+        ultima_tarea = cursor.fetchall()
+        ultima_tarea = ultima_tarea[0][0] if ultima_tarea!=[] else 0 
+        cursor.close()
+
+        number = str(ultima_tarea + 1) 
+        abierto = random.choice([0, 1])
+
+        #Se calcula el periodo actual en segundos
+        aux_periodo     = datetime.now()
+        periodo_actual  = aux_periodo.year*31536000 + (aux_periodo.month-1)*2592000 + (aux_periodo.day-1)*86400
+        periodo_actual += aux_periodo.hour*3600 + aux_periodo.minute*60 + aux_periodo.second
+
+        # Si el agente está inactivo, las tareas creadas son asignaras dentro del rango en que estuvo activo.
+        # de lo contrario solo en una fecha mayor o igual a la creacion del agente hsta la actual
+        created = random.randint(convertir_datetime_segundos(str(agente[3])), convertir_datetime_segundos(str(agente[4]))) if agente[2] == 0 else random.randint(convertir_datetime_segundos(str(agente[3])), periodo_actual)
+        duedate = created + 2592000
+        updated = created if agente[2] == 1 else convertir_datetime_segundos(str(agente[4]))
+        
+        closed  = None
+        if agente[2] == 1:
+            closed  = None if abierto == 0 else random.randint(convertir_datetime_segundos(str(agente[3])), periodo_actual)
+        
+        else:
+            closed  = None if abierto == 0 else random.randint(convertir_datetime_segundos(str(agente[3])), convertir_datetime_segundos(str(agente[4])))
+        
+        # Se insertan los datos en ost_task
+        sentencia = """INSERT INTO ost_task(object_id, object_type, number, dept_id, staff_id, team_id, lock_id, flags, duedate, closed, created, updated)
+                       VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """
+        datos     = (object_id, object_type, number, dept_id, staff_id, team_id, lock_id, 0 if abierto == 1 else 1, convertir_segundos_datetime(duedate), convertir_segundos_datetime(closed) if closed!=None else closed, convertir_segundos_datetime(created), convertir_segundos_datetime(updated))
+            
+        cursor = base_datos.cursor()
+        cursor.execute(sentencia, datos)
+        base_datos.commit()
+        cursor.close()
+
+        # Se consulta por el id de la tarea recien creada
+        cursor = base_datos.cursor()
+        cursor.execute("SELECT id FROM ost_task ORDER BY id DESC LIMIT 1")
+        task_id = cursor.fetchall()[0][0]
+        cursor.close()
+
+        title     = "TAREA %s"%contador
+        contador += 1
+
+        # Se inserta el titulo en su tabla correspondiente
+        sentencia = "INSERT INTO ost_task__cdata(task_id, title) VALUES(%s, %s)"
+        datos     = (task_id, title)
+
+        cursor = base_datos.cursor()
+        cursor.execute(sentencia, datos)
+        base_datos.commit()
+        cursor.close()
+
+        # Se crea el formulario de la actual tarea
+        form_id     = 5
+        object_id   = task_id
+        object_type = "A"
+        sort        = 1
+
+        sentencia = """INSERT INTO ost_form_entry(form_id, object_id, object_type, sort, created, updated)
+                        VALUES(%s, %s, %s, %s, %s, %s)"""
+        
+        datos     = (form_id, object_id, object_type, sort, convertir_segundos_datetime(created), convertir_segundos_datetime(updated))
+
+        cursor = base_datos.cursor()
+        cursor.execute(sentencia, datos)
+        base_datos.commit()
+        cursor.close()
+        
+        # Se consulta por el id de entrada de formulario recien creado
+        cursor = base_datos.cursor()
+        cursor.execute("SELECT id FROM ost_form_entry ORDER BY id DESC LIMIT 1")
+        entry_id = cursor.fetchall()[0][0]
+        cursor.close()
+
+        # Se recopilan datos para insertarlos en ost_form_entry_values
+        field_id = 32
+        value    = title
+
+        sentencia = "INSERT INTO ost_form_entry_values(entry_id, field_id, value) VALUES(%s, %s, %s)"
+        datos = (entry_id, field_id, value)
+
+        cursor = base_datos.cursor()
+        cursor.execute(sentencia, datos)
+        base_datos.commit()
+        cursor.close()
+
+        # Se recopilan datos para ser insertados en ost_thread
+        datos = (object_id, object_type, convertir_segundos_datetime(created))
+
+        cursor = base_datos.cursor()
+        cursor.execute("INSERT INTO ost_thread(object_id, object_type, created) VALUES(%s, %s, %s)", datos)
+        base_datos.commit()
+        cursor.close()
+
+        # Se consulta por el id de los datos recientemente creados y se asignan para posteriormente utilizarlos
+        cursor = base_datos.cursor()
+        cursor.execute("SELECT id FROM ost_thread ORDER BY id DESC LIMIT 1")
+        thread_id = cursor.fetchall()[0][0]
+        cursor.close()
+
+        # Se recopilan datos para ser insertados en la tabla ost_thread_event
+        cursor = base_datos.cursor()
+        cursor.execute("SELECT username FROM ost_staff WHERE staff_id='%s'"%staff_id)
+        username = cursor.fetchall()[0][0]
+        cursor.close()
+
+        thread_type = "A"
+        event_id    = 1
+        team_id     = 0
+        topic_id    = 0
+        uid         = 1
+        uid_type    = "S"
+        annulled     = 0
+        timestamp   = duedate
+
+        sentencia = """INSERT INTO ost_thread_event(thread_id, thread_type, event_id, staff_id, team_id, dept_id, topic_id, username, uid, uid_type, annulled, timestamp)
+                       VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
+        datos = (thread_id, thread_type, event_id, 0, team_id, dept_id, topic_id, username, uid, uid_type, annulled, timestamp)
+
+        cursor = base_datos.cursor()
+        cursor.execute(sentencia, datos)
+        base_datos.commit()
+        cursor.close()
+
+        # Se inserta el evento de la tarea en esta misma tabla
+        event_id = 4
+        data = '{"claim":true}'
+
+        sentencia = """INSERT INTO ost_thread_event(thread_id, thread_type, event_id, staff_id, team_id, dept_id, topic_id, username, uid, uid_type, annulled, timestamp, data)
+                       VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
+        datos = (thread_id, thread_type, event_id, staff_id, team_id, dept_id, topic_id, username, uid, uid_type, annulled, timestamp, data)
+
+        cursor = base_datos.cursor()
+        cursor.execute(sentencia, datos)
+        base_datos.commit()
+        cursor.close()
+
+print("Tareas asignadas correctamente.")
+
+        
